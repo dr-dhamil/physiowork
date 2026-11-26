@@ -144,7 +144,7 @@ p_gender = r.get(gender_col, ";N/A";) if gender_col else ";N/A";
 p_clinic = r.get(clinic_col, ";A-3 Paschim Vihar";) if clinic_col else ";A-3 Paschim Vihar";
 p_hist = str(r.get(hist_col, ";";) or ";";).strip()
 st.markdown(
-f";";";
+f"""
 &lt;div class=";patient-strip";&gt;
 &lt;strong&gt;Patient Assessment:&lt;/strong&gt; {p_name} &amp;nbsp;•&amp;nbsp;
 &lt;strong&gt;ID:&lt;/strong&gt; &lt;code&gt;{selected_pid}&lt;/code&gt; &amp;nbsp;•&amp;nbsp;
@@ -152,7 +152,7 @@ f";";";
 &lt;strong&gt;Phone:&lt;/strong&gt; {p_phone} &amp;nbsp;•&amp;nbsp;
 &lt;strong&gt;Branch:&lt;/strong&gt; {p_clinic}
 &lt;/div&gt;
-";";";,
+""",
 unsafe_allow_html=True,
 )
 if p_hist:
