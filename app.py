@@ -24,7 +24,7 @@ st.set_page_config(
 )
 # --- NAVY (#1B365D) &amp; ORANGE (#F47920) MODERN CLINIC THEME ---
 st.markdown(
-&quot;&quot;&quot;
+"""
 &lt;style&gt;
 :root {
 --navy: #1B365D;
