@@ -104,28 +104,28 @@ unsafe_allow_html=True,
 
 )
 ROLE_MENUS = {
-";Admin / Clinic Owner";: [
-";Front Desk &amp; Queue";,
-";Clinical Assessment";,
-";Patient Registration";,
-";Daily Treatment Log";,
-";Billing &amp; Reminders";,
-";Progress &amp; Summary";,
-";Admin Panel &amp; Settings";,
-],
-";Physiotherapist";: [
-";Front Desk &amp; Queue";,
-";Clinical Assessment";,
-";Patient Registration";,
-";Daily Treatment Log";,
-";Progress &amp; Summary";,
-],
-";Front Desk";: [
-";Front Desk &amp; Queue";,
-";Patient Registration";,
-";Billing &amp; Reminders";,
-";Progress &amp; Summary";,
-],
+    "Admin / Clinic Owner": [
+        "Front Desk & Queue",
+        "Clinical Assessment",
+        "Patient Registration",
+        "Daily Treatment Log",
+        "Billing & Reminders",
+        "Progress & Summary",
+        "Admin Panel & Settings",
+    ],
+    "Physiotherapist": [
+        "Front Desk & Queue",
+        "Clinical Assessment",
+        "Patient Registration",
+        "Daily Treatment Log",
+        "Progress & Summary",
+    ],
+    "Front Desk": [
+        "Front Desk & Queue",
+        "Patient Registration",
+        "Billing & Reminders",
+        "Progress & Summary",
+    ],
 }
 def render_patient_banner(patients_df: pd.DataFrame, selected_pid: str) -&gt; str:
 pid_col = col_val(patients_df, [";patient_id";, ";Patient_ID";])
