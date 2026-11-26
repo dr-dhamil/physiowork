@@ -224,25 +224,20 @@ ROLE_MENUS = {
 }
 
 # --- SUPABASE CONNECTION SETUP ---
+
+EMBEDDED_SUPABASE_URL = "https://cavsikyqrvguuocegsmv.supabase.co"
+EMBEDDED_SUPABASE_KEY = "sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"
+
 try:
-  SUPABASE_URL = st.secrets["https://cavsikyqrvguuocegsmv.supabase.co"]
-  SUPABASE_KEY = st.secrets["sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"]
+  SUPABASE_URL = (
+      st.secrets.get("SUPABASE_URL") or EMBEDDED_SUPABASE_URL
+  ).strip()
+  SUPABASE_KEY = (
+      st.secrets.get("SUPABASE_KEY") or EMBEDDED_SUPABASE_KEY
+  ).strip()
 except Exception:
-  SUPABASE_URL = "https://cavsikyqrvguuocegsmv.supabase.co"
-  SUPABASE_KEY = "sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"
-
-supabase = None
-db_connected = False
-try:
-  if (
-      SUPABASE_URL != "https://cavsikyqrvguuocegsmv.supabase.co"
-      and SUPABASE_KEY != "sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"
-  ):
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    db_connected = True
-except Exception as e:
-  st.sidebar.error(f"Supabase connection error: {e}")
-
+  SUPABASE_URL = EMBEDDED_SUPABASE_URL.strip()
+  SUPABASE_KEY = EMBEDDED_SUPABASE_KEY.strip()
 
 def hash_password(raw_pw):
   return hashlib.sha256(str(raw_pw).strip().encode("utf-8")).hexdigest()
