@@ -179,7 +179,10 @@ def render_patient_banner(patients_df: pd.DataFrame, selected_pid: str) -> str:
       st.warning(f"⚠️ **Medical Precaution Flags:** {p_hist}")
     else:
       st.info(f"📋 **Medical Notes:** {p_hist}")
-  return p_histcfg = get_clinic_settings()
+ return p_hist
+
+
+cfg = get_clinic_settings()
 branches = get_branches_list()
 if "auth_user" not in st.session_state:
 st.session_state["auth_user"] = None
