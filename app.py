@@ -1,12 +1,11 @@
 import datetime
+import hashlib
 import json
 import os
 import urllib.parse
 from fpdf import FPDF
-from google import genai
 import pandas as pd
 import plotly.express as px
-import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from supabase import create_client
@@ -111,6 +110,16 @@ st.markdown(
         margin-bottom: 16px;
         box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
     }
+    .login-card {
+        background-color: var(--card-bg);
+        border-top: 5px solid var(--orange);
+        border-left: 1px solid var(--border-subtle);
+        border-right: 1px solid var(--border-subtle);
+        border-bottom: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 24px 28px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    }
     .patient-strip {
         background-color: var(--card-bg);
         border-left: 5px solid var(--orange);
@@ -129,15 +138,6 @@ st.markdown(
         margin: 0 0 12px 0;
         padding-bottom: 6px;
         border-bottom: 2px solid #F1F5F9;
-    }
-    .ai-box {
-        background-color: #FFFFFF;
-        border: 1px solid #CBD5E1;
-        border-left: 5px solid #1B365D;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-top: 12px;
-        margin-bottom: 14px;
     }
 
     h2, h3 {
@@ -188,8 +188,8 @@ BODY_REGIONS = [
 ]
 
 CLINIC_BRANCHES = [
-    "Main Clinic — Paschim Vihar",
-    "Branch 2 — Rajouri Garden",
+    "A-3 Paschim Vihar",
+    "A-4 Paschim Vihar",
 ]
 
 ROLE_OPTIONS = [
@@ -197,6 +197,31 @@ ROLE_OPTIONS = [
     "Physiotherapist",
     "Front Desk",
 ]
+
+ROLE_MENUS = {
+    "Admin / Clinic Owner": [
+        "Front Desk & Queue",
+        "Clinical Assessment",
+        "Patient Registration",
+        "Daily Treatment Log",
+        "Billing & Reminders",
+        "Progress & Summary",
+        "Staff & Clinic Management",
+    ],
+    "Physiotherapist": [
+        "Front Desk & Queue",
+        "Clinical Assessment",
+        "Patient Registration",
+        "Daily Treatment Log",
+        "Progress & Summary",
+    ],
+    "Front Desk": [
+        "Front Desk & Queue",
+        "Patient Registration",
+        "Billing & Reminders",
+        "Progress & Summary",
+    ],
+}
 
 # --- SUPABASE CONNECTION SETUP ---
 try:
@@ -218,32 +243,41 @@ try:
 except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
-# --- EMBEDDED GEMINI AI KEY SETUP ---
-EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6JfoJBPrMm5AvpjzN0EcLDn1lcK0NBguCH3xmfM-lCF_A"
+
+def hash_password(raw_pw):
+  return hashlib.sha256(str(raw_pw).strip().encode("utf-8")).hexdigest()
 
 
-def get_gemini_api_key():
-  try:
-    secret_val = st.secrets.get("GEMINI_API_KEY")
-    if secret_val and str(secret_val).strip():
-      return str(secret_val).strip()
-  except Exception:
-    pass
-
-  env_val = os.environ.get("GEMINI_API_KEY")
-  if env_val and env_val.strip():
-    return env_val.strip()
-
-  if (
-      EMBEDDED_GEMINI_API_KEY
-      and EMBEDDED_GEMINI_API_KEY != "YOUR_ACTUAL_GEMINI_API_KEY_HERE"
-  ):
-    return EMBEDDED_GEMINI_API_KEY.strip()
-
-  return None
-
-
-GEMINI_API_KEY = get_gemini_api_key()
+# Default built-in clinic accounts (used if staff_users table is empty/offline)
+DEFAULT_STAFF_ACCOUNTS = [
+    {
+        "staff_id": "STF-001",
+        "email": "dr.geetanjali@physioworks.in",
+        "password_hash": hash_password("admin123"),
+        "full_name": "Dr. Geetanjali",
+        "role": "Admin / Clinic Owner",
+        "assigned_clinic": "All Clinics",
+        "active": True,
+    },
+    {
+        "staff_id": "STF-002",
+        "email": "physio@physioworks.in",
+        "password_hash": hash_password("physio123"),
+        "full_name": "Dr. Rohan",
+        "role": "Physiotherapist",
+        "assigned_clinic": "A-3 Paschim Vihar",
+        "active": True,
+    },
+    {
+        "staff_id": "STF-003",
+        "email": "desk@physioworks.in",
+        "password_hash": hash_password("desk123"),
+        "full_name": "Front Desk Reception",
+        "role": "Front Desk",
+        "assigned_clinic": "A-4 Paschim Vihar",
+        "active": True,
+    },
+]
 
 
 def get_data(table_name):
@@ -274,6 +308,32 @@ def save_data(table_name, row_dict):
   )
 
 
+def get_staff_directory():
+  df = get_data("staff_users")
+  if df.empty:
+    return pd.DataFrame(DEFAULT_STAFF_ACCOUNTS)
+  return df
+
+
+def authenticate_staff(login_id, raw_password):
+  staff_df = get_staff_directory()
+  pw_hash = hash_password(raw_password)
+  clean_id = str(login_id).strip().lower()
+
+  for _, row in staff_df.iterrows():
+    email_val = str(row.get("email", "")).strip().lower()
+    sid_val = str(row.get("staff_id", "")).strip().lower()
+    stored_hash = str(row.get("password_hash", "")).strip()
+    is_active = row.get("active", True)
+    if is_active is False:
+      continue
+    if clean_id in (email_val, sid_val) and (
+        pw_hash == stored_hash or str(raw_password).strip() == stored_hash
+    ):
+      return dict(row)
+  return None
+
+
 def update_appointment_status(appt_id, new_status):
   if supabase:
     try:
@@ -282,7 +342,10 @@ def update_appointment_status(appt_id, new_status):
       ).execute()
     except Exception:
       pass
-  if "appointments" in st.session_state and not st.session_state["appointments"].empty:
+  if (
+      "appointments" in st.session_state
+      and not st.session_state["appointments"].empty
+  ):
     df = st.session_state["appointments"].copy()
     id_col = col_val(df, ["appointment_id", "Appointment_ID"])
     st_col = col_val(df, ["status", "Status"])
@@ -336,7 +399,11 @@ def render_patient_banner(patients_df, selected_pid):
   p_name = r.get(name_col, "N/A") if name_col else "N/A"
   p_phone = r.get(phone_col, "N/A") if phone_col else "N/A"
   p_gender = r.get(gender_col, "N/A") if gender_col else "N/A"
-  p_clinic = r.get(clinic_col, "Main Clinic") if clinic_col else "Main Clinic"
+  p_clinic = (
+      r.get(clinic_col, "A-3 Paschim Vihar")
+      if clinic_col
+      else "A-3 Paschim Vihar"
+  )
   p_hist = str(r.get(hist_col, "") or "").strip()
 
   st.markdown(
@@ -715,76 +782,6 @@ def render_true_3d_human_model(selected_regions):
   components.html(html_code, height=514)
 
 
-def generate_gemini_protocol(api_key, context_payload):
-  """Calls Gemini via google-genai SDK first, with direct REST API fallback (on-demand only)."""
-  if not api_key:
-    return (
-        "⚠️ **Gemini API Key missing.** Set `EMBEDDED_GEMINI_API_KEY` in `app.py`"
-        " or configure `GEMINI_API_KEY`."
-    )
-
-  prompt = f"""
-You are a clinical physiotherapy decision-support assistant for Dr. Geetanjali's PhysioWorks.
-Analyze the following patient assessment data and provide a clear, structured clinical protocol suggestion.
-Frame findings as clinical hypotheses to support professional physiotherapy judgment (not a standalone medical diagnosis).
-
-Assessment Data:
-{json.dumps(context_payload, indent=2)}
-
-Format your response cleanly with these 4 sections:
-1. **Safety & Precaution Check** (flag any medical history precautions, red flags, or high irritability considerations)
-2. **Clinical Impression & Key Impairments** (priority body regions, pain/irritability behavior, ROM/neuro/MMT findings)
-3. **Suggested Treatment Protocol** (electrotherapy/modalities, manual therapy focus, targeted exercises with sets/reps/dosage & progression rules)
-4. **Reassessment & Milestones** (key NPRS, ROM, and functional markers to track at follow-up)
-"""
-
-  models_to_try = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-  errors = []
-
-  try:
-    client = genai.Client(api_key=api_key)
-    for model_name in models_to_try:
-      try:
-        resp = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-        )
-        text = getattr(resp, "text", None)
-        if text and text.strip():
-          return text.strip()
-      except Exception as e:
-        errors.append(f"SDK[{model_name}]: {e}")
-  except Exception as e:
-    errors.append(f"SDK init: {e}")
-
-  for model_name in models_to_try:
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-    )
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    try:
-      r = requests.post(
-          url,
-          params={"key": api_key},
-          json=payload,
-          timeout=30,
-      )
-      if r.status_code == 200:
-        data = r.json()
-        candidates = data.get("candidates") or []
-        if candidates:
-          parts = (candidates[0].get("content") or {}).get("parts") or []
-          joined = "".join(p.get("text", "") for p in parts if p.get("text"))
-          if joined.strip():
-            return joined.strip()
-      else:
-        errors.append(f"REST[{model_name}] HTTP {r.status_code}: {r.text[:220]}")
-    except Exception as e:
-      errors.append(f"REST[{model_name}]: {e}")
-
-  raise RuntimeError(" | ".join(errors[-3:]) if errors else "Unknown Gemini error")
-
-
 def _latin1_safe(text):
   return str(text or "").encode("latin-1", errors="replace").decode("latin-1")
 
@@ -835,6 +832,9 @@ def create_assessment_pdf(
   name = patient_row.get("name") or patient_row.get("Name", "N/A")
   gender = patient_row.get("gender") or patient_row.get("Gender", "N/A")
   phone = patient_row.get("phone") or patient_row.get("Phone", "N/A")
+  clinic = patient_row.get("clinic") or patient_row.get(
+      "Clinic", "A-3 Paschim Vihar"
+  )
   reg_date = patient_row.get("registration_date") or patient_row.get(
       "Registration_Date", str(datetime.date.today())
   )
@@ -842,7 +842,7 @@ def create_assessment_pdf(
       "Medical_History", "None reported"
   )
 
-  pdf.cell(95, 7, _latin1_safe(f"Patient ID: {pid}"), border=1)
+  pdf.cell(95, 7, _latin1_safe(f"Patient ID: {pid} ({clinic})"), border=1)
   pdf.cell(91, 7, _latin1_safe(f"Date: {reg_date}"), border=1, ln=True)
   pdf.cell(95, 7, _latin1_safe(f"Name: {name}"), border=1)
   pdf.cell(
@@ -947,7 +947,82 @@ def create_assessment_pdf(
 if "asm_body_parts" not in st.session_state:
   st.session_state["asm_body_parts"] = []
 
-# --- SIDEBAR (LOGO, CLINIC/ROLE SWITCHER & WORKSPACE) ---
+# =====================================================================
+# MODULE 0: STAFF AUTHENTICATION & LOGIN GATE
+# =====================================================================
+if "auth_user" not in st.session_state:
+  st.session_state["auth_user"] = None
+
+if st.session_state["auth_user"] is None:
+  st.markdown(
+      """
+      <div class="clinic-banner">
+          <h1>🩺 Dr. Geetanjali’s PhysioWorks</h1>
+          <p class="clinic-tagline">Physiotherapy • Osteopathy • Chiropractic — A-3 & A-4 Paschim Vihar Clinical Suite</p>
+          <span class="clinic-badge">GET THE CARE YOU DESERVE</span>
+      </div>
+      """,
+      unsafe_allow_html=True,
+  )
+
+  col_l1, col_l2, col_l3 = st.columns([1, 1.35, 1])
+  with col_l2:
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    try:
+      st.image("image_500b64.jpg", width=180)
+    except Exception:
+      pass
+    st.markdown("### 🔐 Staff & Clinician Sign-In")
+    with st.form("staff_login_form"):
+      login_email = st.text_input(
+          "Staff Email or ID",
+          value="dr.geetanjali@physioworks.in",
+          placeholder="e.g., dr.geetanjali@physioworks.in",
+      )
+      login_pass = st.text_input(
+          "Password / Clinic PIN",
+          type="password",
+          placeholder="Enter your password",
+      )
+      login_branch = st.selectbox(
+          "Select Active Clinic Branch",
+          CLINIC_BRANCHES + ["All Clinics"],
+      )
+      login_btn = st.form_submit_button("Sign In to Clinic Workspace")
+
+      if login_btn:
+        user_rec = authenticate_staff(login_email, login_pass)
+        if user_rec:
+          if (
+              user_rec.get("role") != "Admin / Clinic Owner"
+              and login_branch == "All Clinics"
+          ):
+            login_branch = user_rec.get("assigned_clinic") or CLINIC_BRANCHES[0]
+          st.session_state["auth_user"] = user_rec
+          st.session_state["active_clinic"] = login_branch
+          st.rerun()
+        else:
+          st.error(
+              "Invalid staff credentials. Please check your email/ID and"
+              " password."
+          )
+
+    with st.expander("ℹ️ Default Clinic Login Credentials"):
+      st.markdown(
+          """
+          - **Admin / Clinic Owner:** `dr.geetanjali@physioworks.in` / `admin123`
+          - **Physiotherapist:** `physio@physioworks.in` / `physio123`
+          - **Front Desk:** `desk@physioworks.in` / `desk123`
+          """
+      )
+    st.markdown("</div>", unsafe_allow_html=True)
+  st.stop()
+
+# --- AUTHENTICATED USER SESSION ---
+current_user = st.session_state["auth_user"]
+active_role = current_user.get("role", "Physiotherapist")
+allowed_menus = ROLE_MENUS.get(active_role, ROLE_MENUS["Physiotherapist"])
+
 with st.sidebar:
   try:
     st.sidebar.image("image_500b64.jpg", width=210)
@@ -955,37 +1030,36 @@ with st.sidebar:
     st.sidebar.markdown("### 🩺 PhysioWorks")
 
   st.markdown("---")
+  st.markdown(f"**👤 {current_user.get('full_name', 'Staff')}**")
+  st.caption(f"Role: {active_role}")
+
+  branch_choices = (
+      CLINIC_BRANCHES + ["All Clinics"]
+      if active_role == "Admin / Clinic Owner"
+      else CLINIC_BRANCHES
+  )
+  default_branch = st.session_state.get("active_clinic", CLINIC_BRANCHES[0])
+  if default_branch not in branch_choices:
+    default_branch = branch_choices[0]
+
   active_clinic = st.selectbox(
       "Active Clinic",
-      CLINIC_BRANCHES + ["All Clinics"],
-      index=0,
+      branch_choices,
+      index=branch_choices.index(default_branch),
   )
-  active_role = st.selectbox(
-      "Staff Role",
-      ROLE_OPTIONS,
-      index=0,
-  )
-  menu = st.selectbox(
-      "Clinic Workspace",
-      [
-          "Front Desk & Queue",
-          "Clinical Assessment",
-          "Patient Registration",
-          "Daily Treatment Log",
-          "Billing & Reminders",
-          "Progress & Summary",
-      ],
-  )
-  st.markdown("---")
-  if GEMINI_API_KEY:
-    st.success("● Gemini AI: Ready (Embedded)")
-  else:
-    st.warning("● Gemini AI: Add Key in Code")
+  st.session_state["active_clinic"] = active_clinic
 
+  menu = st.selectbox("Clinic Workspace", allowed_menus)
+
+  st.markdown("---")
   if db_connected:
     st.success("● Supabase Cloud Sync: Active")
   else:
     st.info("● Storage Mode: Session Memory")
+
+  if st.button("🚪 Sign Out"):
+    st.session_state["auth_user"] = None
+    st.rerun()
 
 # --- TOP BANNER & CLINIC SNAPSHOT ---
 patients_all = filter_by_clinic(get_data("patients"), active_clinic)
@@ -1000,7 +1074,7 @@ st.markdown(
         <h1>🩺 Dr. Geetanjali’s PhysioWorks</h1>
         <p class="clinic-tagline">Physiotherapy • Osteopathy • Chiropractic — Clinical Documentation, Queue & Rehabilitation Suite</p>
         <span class="clinic-badge">GET THE CARE YOU DESERVE</span>
-        <span class="clinic-pill-meta">📍 {active_clinic} &nbsp;|&nbsp; 👤 {active_role}</span>
+        <span class="clinic-pill-meta">📍 {active_clinic} &nbsp;|&nbsp; 👤 {current_user.get('full_name')} ({active_role})</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -1008,12 +1082,12 @@ st.markdown(
 
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Patients", len(patients_all))
-k2.metric("Today's Queue", len(appointments_all))
+k2.metric("Queue Appointments", len(appointments_all))
 k3.metric("Assessments", len(assessments_all))
 k4.metric("Sessions Logged", len(logs_all))
 
 # =====================================================================
-# 0. FRONT DESK & APPOINTMENT QUEUE BOARD
+# 1. FRONT DESK & APPOINTMENT QUEUE BOARD
 # =====================================================================
 if menu == "Front Desk & Queue":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -1141,9 +1215,7 @@ if menu == "Front Desk & Queue":
 
     filtered_appts = raw_appts.copy()
     if d_col:
-      filtered_appts = filtered_appts[
-          filtered_appts[d_col] == str(view_date)
-      ]
+      filtered_appts = filtered_appts[filtered_appts[d_col] == str(view_date)]
     if s_col and status_filter:
       filtered_appts = filtered_appts[filtered_appts[s_col].isin(status_filter)]
 
@@ -1171,7 +1243,7 @@ if menu == "Front Desk & Queue":
   st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 1. CLINICAL ASSESSMENT (3D MODEL SWITCHER + GEMINI AI)
+# 2. CLINICAL ASSESSMENT (3D MODEL SWITCHER + ALL 10 REGIONS)
 # =====================================================================
 elif menu == "Clinical Assessment":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -1186,7 +1258,7 @@ elif menu == "Clinical Assessment":
     selected_patient = st.selectbox(
         "Select Patient", patient_ids, format_func=fmt_fn
     )
-    patient_med_history = render_patient_banner(patients_all, selected_patient)
+    render_patient_banner(patients_all, selected_patient)
 
     if not assessments_all.empty:
       asm_pid_col = col_val(assessments_all, ["patient_id", "Patient_ID"])
@@ -1210,7 +1282,7 @@ elif menu == "Clinical Assessment":
 
     with col_reg:
       body_parts = st.multiselect(
-          "Affected Body Region(s):",
+          "Affected Body Region(s)*:",
           BODY_REGIONS,
           key="asm_body_parts",
       )
@@ -1225,14 +1297,14 @@ elif menu == "Clinical Assessment":
       st.markdown("**Pain Intensity & Irritability (NPRS 0–10)**")
       p1, p2, p3 = st.columns(3)
       with p1:
-        nprs_rest = st.slider("Rest", 0, 10, 0, key="nprs_rest_s")
+        nprs_rest = st.slider("Rest*", 0, 10, 0, key="nprs_rest_s")
       with p2:
-        nprs_activity = st.slider("Activity", 0, 10, 5, key="nprs_act_s")
+        nprs_activity = st.slider("Activity*", 0, 10, 5, key="nprs_act_s")
       with p3:
         nprs_night = st.slider("Night", 0, 10, 2, key="nprs_night_s")
 
       irritability = st.selectbox(
-          "Symptom Irritability",
+          "Symptom Irritability*",
           [
               "Low (Settles quickly, tolerates moderate load)",
               "Moderate (Provoked by clear activity, settles within hours)",
@@ -1488,7 +1560,7 @@ elif menu == "Clinical Assessment":
 
     st.markdown("---")
     mmt_grade = st.selectbox(
-        "Overall Manual Muscle Testing (MMT)",
+        "Overall Manual Muscle Testing (MMT)*",
         [
             "Grade 5 (Normal - Full ROM against max resistance)",
             "Grade 4 (Good - Full ROM against moderate resistance)",
@@ -1502,8 +1574,8 @@ elif menu == "Clinical Assessment":
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="ui-card"><div class="section-heading">3. Gemini AI'
-        " Protocol Analysis & Saving</div>",
+        '<div class="ui-card"><div class="section-heading">3. Rehabilitation'
+        " Plan & Sign-Off</div>",
         unsafe_allow_html=True,
     )
 
@@ -1512,105 +1584,69 @@ elif menu == "Clinical Assessment":
           "General Electrotherapy & Soft Tissue Mobilization"
       )
 
-    ai_key = f"ai_protocol_{selected_patient}"
-    if st.button("✨ Analyze Assessment & Suggest Protocol with Gemini AI"):
-      payload = {
-          "clinic": active_clinic,
-          "patient_id": selected_patient,
-          "medical_history_and_flags": patient_med_history or "None recorded",
-          "affected_regions": body_parts or ["General"],
-          "marked_pain_locations": pain_spot_notes or "Not specified",
-          "nprs": {
-              "rest": nprs_rest,
-              "activity": nprs_activity,
-              "night": nprs_night,
-          },
-          "irritability": irritability,
-          "functional_goal": functional_goal,
-          "mmt_grade": mmt_grade,
-          "region_details": assessment_details_dict,
-          "baseline_modalities": suggested_treatments,
-      }
-      with st.spinner("Analyzing assessment with Gemini AI..."):
-        try:
-          st.session_state[ai_key] = generate_gemini_protocol(
-              GEMINI_API_KEY, payload
-          )
-        except Exception as e:
-          st.error(f"Gemini AI error: {e}")
-
-    if st.session_state.get(ai_key):
-      st.markdown(
-          '<div class="ai-box"><strong>🤖 Gemini AI Suggested Treatment'
-          " Protocol</strong></div>",
-          unsafe_allow_html=True,
-      )
-      st.markdown(st.session_state[ai_key])
-
     with st.form("assessment_save_form"):
       default_plan = " | ".join(suggested_treatments)
       treatment_plan_input = st.text_area(
-          "Final Treatment Plan & Suggested Modalities (Editable)",
+          "Final Treatment Plan & Suggested Modalities* (Editable)",
           value=default_plan,
-          height=85,
-      )
-      include_ai = st.checkbox(
-          "Attach Gemini AI Protocol summary to saved assessment record",
-          value=bool(st.session_state.get(ai_key)),
+          height=90,
       )
 
       s1, s2 = st.columns(2)
       with s1:
         suggested_time = st.number_input(
-            "Suggested Total Sessions", min_value=1, value=10
+            "Suggested Total Sessions*", min_value=1, value=10
         )
       with s2:
         therapist = st.selectbox(
-            "Assigned Therapist",
+            "Assigned Therapist*",
             ["Dr. Geetanjali", "Dr. Rohan", "Dr. Senior Consultant"],
         )
 
       save_assessment = st.form_submit_button("Save Assessment & Protocol")
       if save_assessment:
-        assessment_id = f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-        ai_note = ""
-        if include_ai and st.session_state.get(ai_key):
-          ai_note = f" | AI Protocol: {st.session_state[ai_key]}"
+        if not body_parts:
+          st.error("Please select at least one Affected Body Region.")
+        else:
+          assessment_id = (
+              f"ASM-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+          )
+          spot_note = (
+              f" | Pain Locations: {pain_spot_notes.strip()}"
+              if pain_spot_notes.strip()
+              else ""
+          )
 
-        spot_note = (
-            f" | Pain Locations: {pain_spot_notes.strip()}"
-            if pain_spot_notes.strip()
-            else ""
-        )
-
-        assessment_dict = {
-            "assessment_id": assessment_id,
-            "patient_id": selected_patient,
-            "clinic": (
-                CLINIC_BRANCHES[0]
-                if active_clinic == "All Clinics"
-                else active_clinic
-            ),
-            "body_parts": ", ".join(body_parts) if body_parts else "General",
-            "vas_score": int(nprs_activity),
-            "assessment_details": (
-                f"NPRS[Rest:{nprs_rest}, Act:{nprs_activity},"
-                f" Night:{nprs_night}] | Irritability: {irritability} | Goal:"
-                f" {functional_goal}{spot_note} | MMT: {mmt_grade} | Details:"
-                f" {str(assessment_details_dict)}{ai_note}"
-            ),
-            "suggested_treatment": treatment_plan_input.strip() or default_plan,
-            "suggested_duration": f"{suggested_time} Sessions",
-            "therapist": therapist,
-            "date": str(datetime.date.today()),
-        }
-        save_data("assessments", assessment_dict)
-        st.success(f"Assessment saved under ID `{assessment_id}`.")
+          assessment_dict = {
+              "assessment_id": assessment_id,
+              "patient_id": selected_patient,
+              "clinic": (
+                  CLINIC_BRANCHES[0]
+                  if active_clinic == "All Clinics"
+                  else active_clinic
+              ),
+              "body_parts": ", ".join(body_parts),
+              "vas_score": int(nprs_activity),
+              "assessment_details": (
+                  f"NPRS[Rest:{nprs_rest}, Act:{nprs_activity},"
+                  f" Night:{nprs_night}] | Irritability: {irritability} | Goal:"
+                  f" {functional_goal}{spot_note} | MMT: {mmt_grade} | Details:"
+                  f" {str(assessment_details_dict)}"
+              ),
+              "suggested_treatment": (
+                  treatment_plan_input.strip() or default_plan
+              ),
+              "suggested_duration": f"{suggested_time} Sessions",
+              "therapist": therapist,
+              "date": str(datetime.date.today()),
+          }
+          save_data("assessments", assessment_dict)
+          st.success(f"Assessment saved under ID `{assessment_id}`.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 2. PATIENT REGISTRATION & DIRECTORY
+# 3. PATIENT REGISTRATION & DIRECTORY
 # =====================================================================
 elif menu == "Patient Registration":
   st.markdown(
@@ -1638,7 +1674,7 @@ elif menu == "Patient Registration":
       )
 
     reg_clinic = st.selectbox(
-        "Home Clinic Branch",
+        "Home Clinic Branch*",
         CLINIC_BRANCHES,
         index=0
         if active_clinic == "All Clinics"
@@ -1708,7 +1744,7 @@ elif menu == "Patient Registration":
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 3. DAILY TREATMENT LOG & REASSESSMENT
+# 4. DAILY TREATMENT LOG & REASSESSMENT
 # =====================================================================
 elif menu == "Daily Treatment Log":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -1750,14 +1786,14 @@ elif menu == "Daily Treatment Log":
       st.markdown("### Log Session & Quick Reassessment")
       c1, c2 = st.columns(2)
       with c1:
-        log_date = st.date_input("Session Date", datetime.date.today())
+        log_date = st.date_input("Session Date*", datetime.date.today())
       with c2:
         current_vas = st.slider(
-            "Current Session NPRS (0–10)", 0, 10, 3, key="cur_v"
+            "Current Session NPRS (0–10)*", 0, 10, 3, key="cur_v"
         )
 
       treatment_given = st.text_area(
-          "Treatment Provided (Electrotherapy, Manual Therapy, Exercise"
+          "Treatment Provided* (Electrotherapy, Manual Therapy, Exercise"
           " Sets/Reps)"
       )
       reassessment_note = st.text_input(
@@ -1803,7 +1839,7 @@ elif menu == "Daily Treatment Log":
           st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 4. BILLING, PACKAGES & REMINDERS
+# 5. BILLING, PACKAGES & REMINDERS
 # =====================================================================
 elif menu == "Billing & Reminders":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -1824,10 +1860,10 @@ elif menu == "Billing & Reminders":
       c1, c2, c3 = st.columns(3)
       with c1:
         b_pid = st.selectbox(
-            "Patient", patient_ids, format_func=fmt_fn, key="b_pid"
+            "Patient*", patient_ids, format_func=fmt_fn, key="b_pid"
         )
         b_pkg = st.selectbox(
-            "Plan / Package",
+            "Plan / Package*",
             [
                 "Single Session",
                 "5-Session Rehab Pack",
@@ -1836,13 +1872,13 @@ elif menu == "Billing & Reminders":
             ],
         )
       with c2:
-        b_amt = st.number_input("Amount (₹)", min_value=0, value=800, step=100)
+        b_amt = st.number_input("Amount (₹)*", min_value=0, value=800, step=100)
         b_mode = st.selectbox(
-            "Payment Mode", ["UPI", "Cash", "Card", "Pending"]
+            "Payment Mode*", ["UPI", "Cash", "Card", "Pending"]
         )
       with c3:
         b_status = st.selectbox(
-            "Payment Status", ["Paid", "Partial", "Pending"]
+            "Payment Status*", ["Paid", "Partial", "Pending"]
         )
         b_followup = st.date_input(
             "Next Follow-Up Date",
@@ -1895,7 +1931,7 @@ elif menu == "Billing & Reminders":
   st.markdown("</div>", unsafe_allow_html=True)
 
 # =====================================================================
-# 5. PROGRESS DASHBOARD & CLINICAL SUMMARY
+# 6. PROGRESS DASHBOARD & CLINICAL SUMMARY
 # =====================================================================
 elif menu == "Progress & Summary":
   pid_col = col_val(patients_all, ["patient_id", "Patient_ID"])
@@ -2042,3 +2078,60 @@ elif menu == "Progress & Summary":
             file_name=f"{dash_patient}_blank_clinical_form.pdf",
             mime="application/pdf",
         )
+
+# =====================================================================
+# 7. STAFF & CLINIC MANAGEMENT (ADMIN ONLY)
+# =====================================================================
+elif menu == "Staff & Clinic Management":
+  st.markdown(
+      '<div class="ui-card"><div class="section-heading">Add Staff User &'
+      " Role Permissions</div>",
+      unsafe_allow_html=True,
+  )
+  with st.form("add_staff_form"):
+    c1, c2, c3 = st.columns(3)
+    with c1:
+      s_name = st.text_input("Full Name*")
+      s_email = st.text_input("Staff Email / Login ID*")
+    with c2:
+      s_role = st.selectbox("Assigned Role*", ROLE_OPTIONS)
+      s_clinic = st.selectbox(
+          "Default Clinic Branch*", CLINIC_BRANCHES + ["All Clinics"]
+      )
+    with c3:
+      s_pass = st.text_input("Initial Password / PIN*", type="password")
+      s_active = st.checkbox("Account Active", value=True)
+
+    add_staff_btn = st.form_submit_button("Create Staff Account")
+    if add_staff_btn:
+      if s_name and s_email and s_pass:
+        staff_df_cur = get_staff_directory()
+        new_sid = f"STF-{len(staff_df_cur) + 1:03d}"
+        save_data(
+            "staff_users",
+            {
+                "staff_id": new_sid,
+                "email": s_email.strip().lower(),
+                "password_hash": hash_password(s_pass),
+                "full_name": s_name.strip(),
+                "role": s_role,
+                "assigned_clinic": s_clinic,
+                "active": s_active,
+            },
+        )
+        st.success(f"Staff user `{s_name}` ({s_role}) created.")
+        st.rerun()
+      else:
+        st.error("Please fill in Full Name, Email/ID, and Initial Password.")
+  st.markdown("</div>", unsafe_allow_html=True)
+
+  st.markdown(
+      '<div class="ui-card"><div class="section-heading">Active Clinic'
+      " Staff Directory</div>",
+      unsafe_allow_html=True,
+  )
+  s_display = get_staff_directory().copy()
+  if "password_hash" in s_display.columns:
+    s_display = s_display.drop(columns=["password_hash"])
+  st.dataframe(s_display, width="stretch", hide_index=True)
+  st.markdown("</div>", unsafe_allow_html=True)
