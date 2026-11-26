@@ -128,43 +128,58 @@ ROLE_MENUS = {
     ],
 }
 def render_patient_banner(patients_df: pd.DataFrame, selected_pid: str) -> str:
-pid_col = col_val(patients_df, ["patient_id", "Patient_ID"])
-name_col = col_val(patients_df, ["name", "Name"])
-phone_col = col_val(patients_df, ["phone", "Phone"])
-gender_col = col_val(patients_df, ["gender", "Gender"])
-hist_col = col_val(patients_df, ["medical_history", "Medical_History"])
-clinic_col = col_val(patients_df, ["clinic", "Clinic"])
-row = patients_df[patients_df[pid_col] == selected_pid]
-if row.empty:
-return ""
-r = row.iloc[0]
-p_name = r.get(name_col, "N/A") if name_col else "N/A"
-p_phone = r.get(phone_col, "N/A") if phone_col else "N/A"
-p_gender = r.get(gender_col, "N/A") if gender_col else "N/A"
-p_clinic = r.get(clinic_col, "A-3 Paschim Vihar") if clinic_col else "A-3 Paschim Vihar"
-p_hist = str(r.get(hist_col, "") or "").strip()
-st.markdown(
-f"""
-&lt;div class="patient-strip"&gt;
-&lt;strong&gt;Patient Assessment:&lt;/strong&gt; {p_name} &amp;nbsp;•&amp;nbsp;
-&lt;strong&gt;ID:&lt;/strong&gt; &lt;code&gt;{selected_pid}&lt;/code&gt; &amp;nbsp;•&amp;nbsp;
-&lt;strong&gt;Gender:&lt;/strong&gt; {p_gender} &amp;nbsp;•&amp;nbsp;
-&lt;strong&gt;Phone:&lt;/strong&gt; {p_phone} &amp;nbsp;•&amp;nbsp;
-&lt;strong&gt;Branch:&lt;/strong&gt; {p_clinic}
-&lt;/div&gt;
-""",
-unsafe_allow_html=True,
-)
-if p_hist:
-alert_keywords = ["diabet", "hypertens", "bp", "anticoagulant", "blood thinner", "pregnan", "osteopor",
-"cancer", "surger", "fracture", "pacemaker"]
-if any(k in p_hist.lower() for k in alert_keywords):
-st.warning(f"⚠️ **Medical Precaution Flags:** {p_hist}")
-else:
-st.info(f"�� **Medical Notes:** {p_hist}")
+  pid_col = col_val(patients_df, ["patient_id", "Patient_ID"])
+  name_col = col_val(patients_df, ["name", "Name"])
+  phone_col = col_val(patients_df, ["phone", "Phone"])
+  gender_col = col_val(patients_df, ["gender", "Gender"])
+  hist_col = col_val(patients_df, ["medical_history", "Medical_History"])
+  clinic_col = col_val(patients_df, ["clinic", "Clinic"])
 
-return p_hist
-cfg = get_clinic_settings()
+  row = patients_df[patients_df[pid_col] == selected_pid]
+  if row.empty:
+    return ""
+  r = row.iloc[0]
+  p_name = r.get(name_col, "N/A") if name_col else "N/A"
+  p_phone = r.get(phone_col, "N/A") if phone_col else "N/A"
+  p_gender = r.get(gender_col, "N/A") if gender_col else "N/A"
+  p_clinic = (
+      r.get(clinic_col, "A-3 Paschim Vihar")
+      if clinic_col
+      else "A-3 Paschim Vihar"
+  )
+  p_hist = str(r.get(hist_col, "") or "").strip()
+
+  st.markdown(
+      f"""
+        <div class="patient-strip">
+            <strong>Patient Assessment:</strong> {p_name} &nbsp;•&nbsp;
+            <strong>ID:</strong> <code>{selected_pid}</code> &nbsp;•&nbsp;
+            <strong>Gender:</strong> {p_gender} &nbsp;•&nbsp;
+            <strong>Phone:</strong> {p_phone} &nbsp;•&nbsp;
+            <strong>Branch:</strong> {p_clinic}
+        </div>
+        """,
+      unsafe_allow_html=True,
+  )
+  if p_hist:
+    alert_keywords = [
+        "diabet",
+        "hypertens",
+        "bp",
+        "anticoagulant",
+        "blood thinner",
+        "pregnan",
+        "osteopor",
+        "cancer",
+        "surger",
+        "fracture",
+        "pacemaker",
+    ]
+    if any(k in p_hist.lower() for k in alert_keywords):
+      st.warning(f"⚠️ **Medical Precaution Flags:** {p_hist}")
+    else:
+      st.info(f"📋 **Medical Notes:** {p_hist}")
+  return p_histcfg = get_clinic_settings()
 branches = get_branches_list()
 if "auth_user" not in st.session_state:
 st.session_state["auth_user"] = None
