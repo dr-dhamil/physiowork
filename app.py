@@ -170,13 +170,13 @@ if ";auth_user"; not in st.session_state:
 st.session_state[";auth_user";] = None
 if st.session_state[";auth_user";] is None:
 st.markdown(
-f";";";
+f"""
 &lt;div class=";clinic-banner";&gt;
 &lt;h1&gt;�� {cfg.get(&#39;clinic_title&#39;)}&lt;/h1&gt;
 &lt;p class=";clinic-tagline";&gt;{cfg.get(&#39;clinic_tagline&#39;)}&lt;/p&gt;
 &lt;span class=";clinic-badge";&gt;{cfg.get(&#39;clinic_badge&#39;)}&lt;/span&gt;
 &lt;/div&gt;
-";";";,
+""",
 unsafe_allow_html=True,
 )
 _, col_mid, _ = st.columns([1, 1.35, 1])
