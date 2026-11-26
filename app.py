@@ -219,7 +219,7 @@ except Exception as e:
   st.sidebar.error(f"Supabase connection error: {e}")
 
 # --- EMBEDDED GEMINI AI KEY SETUP ---
-EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6K26e4f7O1tNNVWO_noxvmfeQhelPHr5cBbpbrBbQ0dPg"
+EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6JfoJBPrMm5AvpjzN0EcLDn1lcK0NBguCH3xmfM-lCF_A"
 
 
 def get_gemini_api_key():
