@@ -225,8 +225,8 @@ ROLE_MENUS = {
 
 # --- SUPABASE CONNECTION SETUP ---
 try:
-  SUPABASE_URL = st.secrets["SUPABASE_URL"]
-  SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+  SUPABASE_URL = st.secrets["https://cavsikyqrvguuocegsmv.supabase.co"]
+  SUPABASE_KEY = st.secrets["sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"]
 except Exception:
   SUPABASE_URL = "https://cavsikyqrvguuocegsmv.supabase.co"
   SUPABASE_KEY = "sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"
