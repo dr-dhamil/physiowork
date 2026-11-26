@@ -11,7 +11,7 @@ db_connected = False
 
 # New physiowork Supabase credentials (st.secrets checked first if configured)
 EMBEDDED_SUPABASE_URL = "https://cavsikyqrvguuocegsmv.supabase.co"
-EMBEDDED_SUPABASE_KEY = "sb_publishable_9EmHVLBa0f9wSDv_PASTE_YOUR_FULL_KEY_HERE"
+EMBEDDED_SUPABASE_KEY = "sb_publishable_9EmHVLBa0f9wSDv69MD2Mw_aruWo_fh"
 
 try:
     SUPABASE_URL = (st.secrets.get("SUPABASE_URL") or EMBEDDED_SUPABASE_URL).strip()
