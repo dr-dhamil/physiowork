@@ -17,10 +17,10 @@ from module_assessment import render_assessment_page
 from module_frontdesk import render_frontdesk_page
 from pdf_utils import create_assessment_pdf
 st.set_page_config(
-page_title=&quot;Dr. Geetanjali’s PhysioWorks&quot;,
-page_icon=&quot;��&quot;,
-layout=&quot;wide&quot;,
-initial_sidebar_state=&quot;expanded&quot;,
+    page_title="Dr. Geetanjali's PhysioWorks",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 # --- NAVY (#1B365D) &amp; ORANGE (#F47920) MODERN CLINIC THEME ---
 st.markdown(
