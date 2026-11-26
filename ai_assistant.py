@@ -6,7 +6,7 @@ try:
 from google import genai
 except Exception:
 genai = None
-EMBEDDED_GEMINI_API_KEY = &quot;&quot;
+EMBEDDED_GEMINI_API_KEY = "AQ.Ab8RN6JfoJBPrMm5AvpjzN0EcLDn1lcK0NBguCH3xmfM-lCF_A"
 def get_gemini_api_key() -&gt; str:
 try:
 s_val = st.secrets.get(&quot;GEMINI_API_KEY&quot;)
